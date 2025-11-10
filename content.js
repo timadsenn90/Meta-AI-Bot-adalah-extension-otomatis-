@@ -96,87 +96,151 @@ function generateNextImage() {
   }, delay);
 }
 
-function sendPrompt(prompt) {
+// Helper function to wait for element to appear
+function waitForElement(selectors, timeout = 5000) {
+  return new Promise((resolve) => {
+    const startTime = Date.now();
+
+    const checkElement = () => {
+      for (const selector of selectors) {
+        const elements = document.querySelectorAll(selector);
+        if (elements.length > 0) {
+          // Try to find the main input (usually the largest or most visible one)
+          const element = Array.from(elements).find(el => {
+            const rect = el.getBoundingClientRect();
+            return rect.width > 100 && rect.height > 20;
+          }) || elements[0];
+
+          if (element) {
+            console.log('✅ Element found with selector:', selector);
+            resolve(element);
+            return;
+          }
+        }
+      }
+
+      // Check if timeout reached
+      if (Date.now() - startTime > timeout) {
+        console.error('❌ Timeout: Element tidak ditemukan setelah', timeout, 'ms');
+        resolve(null);
+        return;
+      }
+
+      // Try again after a short delay
+      setTimeout(checkElement, 100);
+    };
+
+    checkElement();
+  });
+}
+
+// Trigger React/Vue events properly
+function setNativeValue(element, value) {
+  const { set: valueSetter } = Object.getOwnPropertyDescriptor(element, 'value') || {};
+  const prototype = Object.getPrototypeOf(element);
+  const { set: prototypeValueSetter } = Object.getOwnPropertyDescriptor(prototype, 'value') || {};
+
+  if (prototypeValueSetter && valueSetter !== prototypeValueSetter) {
+    prototypeValueSetter.call(element, value);
+  } else if (valueSetter) {
+    valueSetter.call(element, value);
+  } else {
+    element.value = value;
+  }
+}
+
+// Trigger all necessary events for modern frameworks
+function triggerInputEvents(element) {
+  // Focus the element first
+  element.focus();
+
+  // Trigger multiple events that React/Vue listen to
+  const events = [
+    new Event('input', { bubbles: true, cancelable: true }),
+    new Event('change', { bubbles: true, cancelable: true }),
+    new Event('keyup', { bubbles: true, cancelable: true }),
+    new Event('keydown', { bubbles: true, cancelable: true }),
+    new InputEvent('input', { bubbles: true, cancelable: true, inputType: 'insertText' })
+  ];
+
+  events.forEach(event => element.dispatchEvent(event));
+}
+
+async function sendPrompt(prompt) {
   console.log('🎨 Generating:', prompt);
 
-  // Find the input textarea
-  // Meta AI uses different selectors, we'll try multiple approaches
-  const selectors = [
+  // Find the input textarea with retry mechanism
+  const inputSelectors = [
     'textarea[placeholder*="Ask"]',
     'textarea[placeholder*="Message"]',
+    'textarea[placeholder*="ask"]',
+    'textarea[placeholder*="message"]',
+    'textarea.x1i10hfl', // Meta AI specific class
     'textarea',
     'input[type="text"]',
     '[contenteditable="true"]',
     'div[role="textbox"]'
   ];
 
-  let inputElement = null;
-  for (const selector of selectors) {
-    const elements = document.querySelectorAll(selector);
-    if (elements.length > 0) {
-      // Try to find the main input (usually the largest or most visible one)
-      inputElement = Array.from(elements).find(el => {
-        const rect = el.getBoundingClientRect();
-        return rect.width > 100 && rect.height > 20;
-      }) || elements[0];
-
-      if (inputElement) {
-        console.log('✅ Input found:', selector);
-        break;
-      }
-    }
-  }
+  const inputElement = await waitForElement(inputSelectors, 5000);
 
   if (!inputElement) {
-    console.error('❌ Input tidak ditemukan!');
+    console.error('❌ Input tidak ditemukan! Mencoba lagi...');
+    console.log('💡 Tip: Pastikan Anda berada di halaman Meta AI yang benar');
     return;
   }
 
-  // Set the value
+  console.log('📝 Memasukkan prompt ke input...');
+
+  // Set the value based on element type
   if (inputElement.tagName === 'TEXTAREA' || inputElement.tagName === 'INPUT') {
-    inputElement.value = prompt;
-    inputElement.dispatchEvent(new Event('input', { bubbles: true }));
-    inputElement.dispatchEvent(new Event('change', { bubbles: true }));
+    // Use native setter for React components
+    setNativeValue(inputElement, prompt);
+    triggerInputEvents(inputElement);
+    console.log('✅ Prompt dimasukkan ke textarea');
   } else {
     // For contenteditable divs
-    inputElement.textContent = prompt;
-    inputElement.dispatchEvent(new Event('input', { bubbles: true }));
-  }
+    inputElement.focus();
 
-  // Wait a bit for the UI to update
-  setTimeout(() => {
-    // Find and click the send button
-    const buttonSelectors = [
-      'button[aria-label*="Send"]',
-      'button[aria-label*="submit"]',
-      'button[type="submit"]',
-      'button:has(svg)',
-      '[role="button"]'
-    ];
-
-    let sendButton = null;
-    for (const selector of buttonSelectors) {
-      const buttons = document.querySelectorAll(selector);
-      if (buttons.length > 0) {
-        // Find button near the input
-        sendButton = Array.from(buttons).find(btn => {
-          const btnText = btn.textContent.toLowerCase();
-          const ariaLabel = btn.getAttribute('aria-label')?.toLowerCase() || '';
-          return btnText.includes('send') ||
-                 ariaLabel.includes('send') ||
-                 ariaLabel.includes('submit') ||
-                 btn.querySelector('svg'); // Button with icon
-        });
-
-        if (sendButton) {
-          console.log('✅ Send button found:', selector);
-          break;
-        }
-      }
+    // Try different methods for contenteditable
+    if (inputElement.textContent !== prompt) {
+      inputElement.textContent = prompt;
+    }
+    if (inputElement.innerText !== prompt) {
+      inputElement.innerText = prompt;
     }
 
-    if (sendButton) {
-      sendButton.click();
+    // Trigger events
+    triggerInputEvents(inputElement);
+    console.log('✅ Prompt dimasukkan ke contenteditable');
+  }
+
+  // Wait for UI to update and find send button
+  await new Promise(resolve => setTimeout(resolve, 800));
+
+  console.log('🔍 Mencari tombol kirim...');
+
+  // Find and click the send button
+  const buttonSelectors = [
+    'button[aria-label*="Send"]',
+    'button[aria-label*="send"]',
+    'button[aria-label*="Submit"]',
+    'button[aria-label*="submit"]',
+    'button[type="submit"]',
+    'button svg[viewBox]', // Button containing SVG icon
+    '[role="button"][aria-label*="Send"]',
+    '[role="button"][aria-label*="send"]'
+  ];
+
+  const sendButton = await waitForElement(buttonSelectors, 3000);
+
+  if (sendButton) {
+    console.log('🖱️ Mengklik tombol kirim...');
+
+    // Click the button (or its parent if it's an SVG)
+    const clickTarget = sendButton.tagName === 'svg' ? sendButton.closest('button') : sendButton;
+    if (clickTarget) {
+      clickTarget.click();
       console.log('✅ Prompt terkirim!');
 
       // Increment counter
@@ -185,21 +249,35 @@ function sendPrompt(prompt) {
         chrome.storage.local.set({ imageCount: count });
         console.log('📊 Total gambar:', count);
       });
-    } else {
-      console.error('❌ Send button tidak ditemukan!');
-
-      // Try to submit with Enter key as fallback
-      const enterEvent = new KeyboardEvent('keydown', {
-        key: 'Enter',
-        code: 'Enter',
-        keyCode: 13,
-        which: 13,
-        bubbles: true
-      });
-      inputElement.dispatchEvent(enterEvent);
-      console.log('⌨️ Mencoba submit dengan Enter key');
     }
-  }, 500);
+  } else {
+    console.warn('⚠️ Send button tidak ditemukan, mencoba Enter key...');
+
+    // Try to submit with Enter key as fallback
+    inputElement.focus();
+    const enterEvent = new KeyboardEvent('keydown', {
+      key: 'Enter',
+      code: 'Enter',
+      keyCode: 13,
+      which: 13,
+      bubbles: true,
+      cancelable: true
+    });
+    inputElement.dispatchEvent(enterEvent);
+
+    // Also try keypress
+    const keypressEvent = new KeyboardEvent('keypress', {
+      key: 'Enter',
+      code: 'Enter',
+      keyCode: 13,
+      which: 13,
+      bubbles: true,
+      cancelable: true
+    });
+    inputElement.dispatchEvent(keypressEvent);
+
+    console.log('⌨️ Enter key ditekan');
+  }
 }
 
 // Add visual indicator that bot is running
