@@ -1,3 +1,54 @@
+// Helper function to check if extension context is valid
+function isExtensionContextValid() {
+  try {
+    // Try to access chrome.runtime.id
+    // If extension is reloaded, this will throw an error
+    return chrome.runtime && chrome.runtime.id !== undefined;
+  } catch (error) {
+    return false;
+  }
+}
+
+// Safe wrapper for chrome.storage.local.get
+function safeStorageGet(keys, callback) {
+  if (!isExtensionContextValid()) {
+    console.warn('⚠️ Extension context invalidated, skipping storage.get');
+    return;
+  }
+
+  try {
+    chrome.storage.local.get(keys, (data) => {
+      if (chrome.runtime.lastError) {
+        console.error('Storage get error:', chrome.runtime.lastError.message);
+        return;
+      }
+      callback(data);
+    });
+  } catch (error) {
+    console.error('Storage get failed:', error.message);
+  }
+}
+
+// Safe wrapper for chrome.storage.local.set
+function safeStorageSet(data, callback) {
+  if (!isExtensionContextValid()) {
+    console.warn('⚠️ Extension context invalidated, skipping storage.set');
+    return;
+  }
+
+  try {
+    chrome.storage.local.set(data, () => {
+      if (chrome.runtime.lastError) {
+        console.error('Storage set error:', chrome.runtime.lastError.message);
+        return;
+      }
+      if (callback) callback();
+    });
+  } catch (error) {
+    console.error('Storage set failed:', error.message);
+  }
+}
+
 // Bot state
 let isRunning = false;
 let currentIndex = 0;
@@ -9,15 +60,25 @@ let intervalId = null;
 
 // Listen for messages from popup
 chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
-  if (request.action === 'start') {
-    startBot(request);
-  } else if (request.action === 'stop') {
-    stopBot();
+  try {
+    if (!isExtensionContextValid()) {
+      console.warn('⚠️ Extension context invalidated, stopping bot');
+      stopBot();
+      return;
+    }
+
+    if (request.action === 'start') {
+      startBot(request);
+    } else if (request.action === 'stop') {
+      stopBot();
+    }
+  } catch (error) {
+    console.error('Message listener error:', error.message);
   }
 });
 
 // Check if bot should resume on page load
-chrome.storage.local.get(['isRunning', 'prompts', 'delay', 'randomMode', 'loopMode', 'currentIndex'], (data) => {
+safeStorageGet(['isRunning', 'prompts', 'delay', 'randomMode', 'loopMode', 'currentIndex'], (data) => {
   if (data.isRunning) {
     startBot({
       prompts: data.prompts ? data.prompts.split('\n').filter(p => p.trim()) : [],
@@ -60,6 +121,13 @@ function stopBot() {
 function generateNextImage() {
   if (!isRunning) return;
 
+  // Check if extension context is still valid
+  if (!isExtensionContextValid()) {
+    console.warn('⚠️ Extension context invalidated, stopping bot');
+    stopBot();
+    return;
+  }
+
   // Get next prompt
   let prompt;
   if (randomMode) {
@@ -76,14 +144,14 @@ function generateNextImage() {
       } else {
         console.log('✅ Semua prompt telah diproses!');
         stopBot();
-        chrome.storage.local.set({ isRunning: false });
+        safeStorageSet({ isRunning: false });
         return;
       }
     }
   }
 
   // Save current index
-  chrome.storage.local.set({ currentIndex });
+  safeStorageSet({ currentIndex });
 
   // Send the prompt
   if (prompt && prompt.trim()) {
@@ -244,9 +312,9 @@ async function sendPrompt(prompt) {
       console.log('✅ Prompt terkirim!');
 
       // Increment counter
-      chrome.storage.local.get(['imageCount'], (data) => {
+      safeStorageGet(['imageCount'], (data) => {
         const count = (data.imageCount || 0) + 1;
-        chrome.storage.local.set({ imageCount: count });
+        safeStorageSet({ imageCount: count });
         console.log('📊 Total gambar:', count);
       });
     }
@@ -322,7 +390,23 @@ function addVisualIndicator() {
 
 // Update indicator based on running state
 setInterval(() => {
-  chrome.storage.local.get(['isRunning'], (data) => {
+  // Check if extension context is valid before accessing storage
+  if (!isExtensionContextValid()) {
+    // Context invalidated, stop bot and remove indicator
+    if (isRunning) {
+      console.warn('⚠️ Extension context invalidated, stopping bot');
+      isRunning = false;
+      if (intervalId) {
+        clearTimeout(intervalId);
+        intervalId = null;
+      }
+    }
+    const indicator = document.getElementById('metaAIBotIndicator');
+    if (indicator) indicator.remove();
+    return;
+  }
+
+  safeStorageGet(['isRunning'], (data) => {
     if (data.isRunning) {
       addVisualIndicator();
     } else {
