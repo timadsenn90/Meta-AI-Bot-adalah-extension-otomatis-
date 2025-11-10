@@ -1,0 +1,88 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Meta AI Bot</title>
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <div class="container">
+    <div class="header">
+      <h1>🤖 Meta AI Bot</h1>
+      <p class="subtitle">Auto Image Generator</p>
+    </div>
+
+    <div class="status">
+      <div class="status-indicator">
+        <span class="status-dot" id="statusDot"></span>
+        <span id="statusText">Tidak Aktif</span>
+      </div>
+      <div class="counter">
+        <span id="imageCount">0</span> gambar dibuat
+      </div>
+    </div>
+
+    <div class="section">
+      <label for="promptList">Daftar Prompt (satu per baris):</label>
+      <textarea
+        id="promptList"
+        placeholder="Contoh:&#10;a beautiful sunset over mountains&#10;a cute cat playing with yarn&#10;futuristic city at night"
+        rows="6"
+      ></textarea>
+    </div>
+
+    <div class="section">
+      <label for="delay">Jeda Waktu (detik):</label>
+      <div class="input-group">
+        <input type="number" id="delay" min="5" max="300" value="10">
+        <span class="input-suffix">detik</span>
+      </div>
+      <small>Minimum 5 detik, maksimum 300 detik (5 menit)</small>
+    </div>
+
+    <div class="section">
+      <label>
+        <input type="checkbox" id="randomMode">
+        Mode Random (pilih prompt secara acak)
+      </label>
+    </div>
+
+    <div class="section">
+      <label>
+        <input type="checkbox" id="loopMode">
+        Loop Mode (ulangi dari awal setelah selesai)
+      </label>
+    </div>
+
+    <div class="controls">
+      <button id="startBtn" class="btn btn-primary">
+        <span>▶</span> Mulai
+      </button>
+      <button id="stopBtn" class="btn btn-danger" disabled>
+        <span>⏹</span> Stop
+      </button>
+      <button id="resetBtn" class="btn btn-secondary">
+        <span>↻</span> Reset
+      </button>
+    </div>
+
+    <div class="section info">
+      <h3>📋 Cara Penggunaan:</h3>
+      <ol>
+        <li>Buka halaman <a href="https://www.meta.ai" target="_blank">Meta AI</a></li>
+        <li>Masukkan prompt gambar yang ingin dibuat</li>
+        <li>Atur jeda waktu antara setiap generate</li>
+        <li>Klik tombol "Mulai" untuk memulai bot</li>
+        <li>Bot akan otomatis generate gambar sesuai prompt</li>
+      </ol>
+    </div>
+
+    <div class="footer">
+      <p>v1.0.0 | Made with ❤️</p>
+    </div>
+  </div>
+
+  <script src="popup.js"></script>
+</body>
+</html>
